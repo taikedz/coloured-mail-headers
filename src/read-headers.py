@@ -3,6 +3,29 @@
 import sys
 import re
 
+print_queue = []
+
+# Output management
+# We queue output to allow pasting to stdin
+#  without interleaving the paste with the output
+
+def printq(message):
+    print_queue.append(message)
+
+def flushPrintQueue():
+    print("")
+
+    for line in print_queue:
+        print(line)
+
+def printc(colour, message):
+    printq("\033[%i;1m%s\033[0m" % (colour, message) )
+
+def printd(message):
+    pass #printc(35, message)
+
+# Ingest management
+
 class ReadBufferException(Exception):
     def __init__(self, message):
         Exception.__init__(self, message)
@@ -12,23 +35,26 @@ class InvalidLineException(ReadBufferException):
         ReadBufferException(self, message)
 
 class ReadBuffer:
+    # Headers can be comprised of multiple lines
+    #  this buffer allows accessing each header as a whole
 
     def __init__(self, instream):
         self.__in = instream
         self.__next_line = None
 
     def loadNextLine(self):
+        # "Next" line is empty (as opposed to None, which would mean 'ready to load new line') - end of headers
         if self.__next_line == '':
             return None
 
-        if self.__next_line == None:
+        if self.__next_line == None: # Line has not been read, or previous line has been consumed
             self.__next_line = self.__in.readline()
             printd("Loaded [%s]" % self.__next_line)
 
         return self.__next_line
 
     def readLine(self):
-        if self.loadNextLine() == None:
+        if self.loadNextLine() == None: # Load and check, individually
             return None
 
         the_line = self.__next_line
@@ -60,14 +86,7 @@ class ReadBuffer:
 
         return ' '.join( header_lines )
 
-def printq(message):
-    print_queue.append(message)
-
-def printc(colour, message):
-    printq("\033[%i;1m%s\033[0m" % (colour, message) )
-
-def printd(message):
-    pass #printc(35, message)
+# Main procedures
 
 def getReceivedByHeaders(read_buffer):
     while True:
@@ -78,13 +97,26 @@ def getReceivedByHeaders(read_buffer):
         if not re.match("(Received|X-Received):", header):
             continue
 
-        ix_f = header.find("from")
-        ix_b = header.find("by")
+        # Indices of from and by sections
+        ix_f = header.lower().find("from")
+        ix_b = header.lower().find("by")
 
+
+        # Print green when both are found
         if ix_f > 0 and ix_b > 0:
-            printc(32, "By  : %s" % header[ix_b:])
-            printc(32, "From: %s" % header[ix_f:ix_b])
+            if ix_f < ix_b:
+                bytext = header[ix_b:]
+                fromtext = header[ix_f:ix_b]
+            else:
+                bytext = header[ix_b:ix_f]
+                fromtext = header[ix_f]
 
+            printc(32, "By  : %s" % bytext)
+            printc(32, "From: %s" % fromtext)
+
+
+        # Print yellow when only one is found
+        #  this indicates some sort of internal masking is happening
         elif ix_f > 0:
             printc(33, "From: %s" % header[ix_f:])
 
@@ -92,23 +124,21 @@ def getReceivedByHeaders(read_buffer):
             printc(33, "By  : %s" % header[ix_b:])
 
         else:
-            printc(31, "Anomaly: no from/by: %s " % header)
+            printc(31, "Anomaly: no from/by in 'Received*' section: %s " % header)
 
         printc(0, "----------")
-            
-
-def flushPrintQueue():
-    for line in print_queue:
-        print(line)
-
-print_queue = []
 
 def main():
-    rb = ReadBuffer(sys.stdin)
+    try:
+        rb = ReadBuffer(sys.stdin)
 
-    getReceivedByHeaders(rb)
+        getReceivedByHeaders(rb)
 
-    flushPrintQueue()
+    except KeyboardInterrupt as e:
+        pass #print(e)
+
+    finally:
+        flushPrintQueue()
 
 if __name__ == '__main__':
     main()
