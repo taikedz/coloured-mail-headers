@@ -1,3 +1,5 @@
+> Moved to <https://gitlab.com/taikedz/coloured-mail-headers/>
+
 # Mail header reader
 
 Script to parse mail headers on stdin and print out from/by stages on stdout, in colour; to ease tracing of the intermediate handling servers of a message.
